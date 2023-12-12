@@ -2,6 +2,7 @@ module Main where
 
 import System.Environment
 import System.Exit
+import System.Random
 import Data.Time.LocalTime
 import Data.Time.Format.ISO8601
 
@@ -49,3 +50,9 @@ consumeFiles (Just args) (f:fs) = do
     putStrLn f
     printArgumentGroup args
     consumeFiles (Just args) fs
+
+checkTime (Just (Arguments s e r)) = do
+    zonedTime <- getZonedTime
+    let localTime = localTimeOfDay $ zonedTimeToLocalTime zonedTime
+    return $ localTime >= s && localTime <= e
+
