@@ -3,25 +3,49 @@ module Main where
 import System.Environment
 import System.Exit
 import Data.Time.LocalTime
+import Data.Time.Format.ISO8601
 
 main :: IO ()
-main = getArgs >>= parse >>= putStr . rntf
+main = getArgs >>= parse
 
 data ArgumentGroup = Arguments {
      start   :: TimeOfDay
     ,end     :: TimeOfDay
     ,recurse :: Bool
-    ,files   :: [String]
 }
 
-rntf files  = "notrandom.jpg"
+parseArgumentGroup recurse start end = do
+    startTOD <- parseFormatExtension hourMinuteFormat start
+    endTOD   <- parseFormatExtension hourMinuteFormat end
+    Just $ Arguments startTOD endTOD recurse
+printArgumentGroup (Arguments s e r) = do
+    print s
+    print e
+    print r
 
-parse ["-h"] = usage   >> exit 
-parse ["-v"] = version >> exit 
-parse [fs]   = putStrLn fs
-parse []     = exit
+parse ["-h"]            = usage   >> exit 
+parse ["-v"]            = version >> exit 
+parse []                = usage   >> failed
+parse (_:_:[])          = usage   >> failed
+parse fs                = consume fs
 
 usage        = putStrLn "Usage: rntf [-vh] [start end [file ...],]"
 version      = putStrLn "rntf 0.1"
 exit         = exitWith   ExitSuccess
-die          = exitWith $ ExitFailure 1
+failed       = exitWith $ ExitFailure 1
+
+consume ("-r":s:e:fs)   = do
+    consumeFiles (parseArgumentGroup True s e) fs
+
+consume (s:e:fs)        = do
+    consumeFiles (parseArgumentGroup False s e) fs
+consume []              = exit
+
+consumeFiles _ (",":fs)  = consume fs
+consumeFiles _ []        = consume []
+consumeFiles Nothing _   = failed
+consumeFiles (Just args) (f:fs) = do
+    let (Arguments s e r) = args
+    putStrLn f
+    printArgumentGroup args
+    consumeFiles (Just args) fs
