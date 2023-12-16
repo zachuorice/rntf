@@ -68,7 +68,7 @@ executable rntf
     -- other-extensions:
 
     -- Other library packages from which modules are imported.
-    build-depends: base ^>=4.15.1.0, time ^>=1.12.2, random ^>=1.2.1.1
+    build-depends: base ^>=4.15.1.0, time ^>=1.12.2, random ^>=1.2.1.1, directory ^>=1.3.6.2
 
     -- Directories containing source files.
     hs-source-dirs:   app

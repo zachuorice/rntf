@@ -23,9 +23,11 @@ module Main where
 import System.Environment
 import System.Exit
 import System.Random
+import System.Directory
 import Data.Time.LocalTime
 import Data.Time.Format.ISO8601
 import Data.Time.Clock.System
+import Control.Exception
 
 main :: IO ()
 main = getArgs >>= parse
@@ -33,17 +35,21 @@ main = getArgs >>= parse
 data ArgumentGroup = Arguments {
      start   :: TimeOfDay
     ,end     :: TimeOfDay
-    ,recurse :: Bool
 }
 
-parseArgumentGroup recurse start end = do
-    startTOD <- parseFormatExtension hourMinuteFormat start
-    endTOD   <- parseFormatExtension hourMinuteFormat end
-    Just $ Arguments startTOD endTOD recurse
-printArgumentGroup (Arguments s e r) = do
-    print s
-    print e
-    print r
+instance Show ArgumentGroup where
+    show (Arguments s e) = do
+        show s
+        show e
+
+padl :: String -> String -> Int -> String
+padl s c l = if l <= 0 then s else c ++ (padl s c (l-1))
+
+parseArgumentGroup :: String -> String -> Maybe ArgumentGroup
+parseArgumentGroup start end = do
+    startTOD <- parseFormatExtension hourMinuteFormat (padl start "0" (5 - (length start))) -- If input is 8:00 make it 08:00
+    endTOD   <- parseFormatExtension hourMinuteFormat (padl end "0" (5 - (length end)))
+    Just $ Arguments startTOD endTOD
 
 parse ["-h"]            = usage   >> exit 
 parse ["-v"]            = version >> exit 
@@ -56,25 +62,35 @@ version      = putStrLn "rntf 0.1"
 exit         = exitWith   ExitSuccess
 failed       = exitWith $ ExitFailure 1
 
-consume ("-r":s:e:fs)   = do
-    consumeFiles 0 (parseArgumentGroup True s e) fs
-
+consume :: [String] -> IO()
+consume (",":fs) = consume fs
 consume (s:e:fs)        = do
-    consumeFiles 0 (parseArgumentGroup False s e) fs
-consume []              = exit
+    let args = (parseArgumentGroup s e)
+    dirs <- consumeDirs (fs, [])
+    consumeFilenames 0 args dirs
+consume _              = exit
 
--- TODO: Directory lister and recursive walker to use consumeFiles
+consumeDirs :: ([FilePath], [FilePath]) -> IO([FilePath])
+consumeDirs ((p:pl), ol) = do
+    spl <- catch (listDirectory p) handler
+    consumeDirs (pl, ol++spl)
+    where
+        handler :: IOError -> IO([FilePath])
+        handler _ = do
+            consumeDirs (pl, p:ol)
+consumeDirs ([],ol) = return ol
+consumeDirs _ = do return ([])
 
-consumeFiles i _ (",":fs)           = consume fs
-consumeFiles i _ []                 = consume []
-consumeFiles i Nothing _            = failed
-consumeFiles i (Just args) (f:fs) = do
+consumeFilenames :: Int -> Maybe ArgumentGroup -> [FilePath] -> IO()
+consumeFilenames i _ []                 = consume []
+consumeFilenames i Nothing _            = usage
+consumeFilenames i (Just args) (f:fs) = do
     isTime <- checkTime (Just args)
     thePick <- randomPick (i, (i + (length fs))) i
     if isTime && thePick then 
         putStrLn f
     else
-        consumeFiles (i+1) (Just args) fs
+        consumeFilenames (i+1) (Just args) fs
 
 checkRandomPick (a, stdGen) i = a == i
 
@@ -85,7 +101,7 @@ randomPick r i = do
     let result =  uniformR r pureGen
     return $ checkRandomPick result i
 
-checkTime (Just (Arguments s e r)) = do
+checkTime (Just (Arguments s e)) = do
     zonedTime <- getZonedTime
     let localTime = localTimeOfDay $ zonedTimeToLocalTime zonedTime
     return $ localTime >= s && localTime <= e
